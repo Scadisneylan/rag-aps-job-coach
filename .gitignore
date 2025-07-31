@@ -1,0 +1,8 @@
+# Ignore Python environment and generated files
+.venv/
+__pycache__/
+*.pyc
+.env
+chroma_db/
+*.log
+.ipynb_checkpoints/
