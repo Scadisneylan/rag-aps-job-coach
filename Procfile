@@ -1,1 +1,1 @@
-web: gunicorn rag-bot:app
+web: gunicorn wsgi:app
