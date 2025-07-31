@@ -20,7 +20,8 @@ load_dotenv()
 
 # --- Configuration ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
-structured_data_file = "my_structured_document.csv" # Ensure this filename is correct
+structured_data_file = "my_structured_document.csv"
+# IMPORTANT CHANGE HERE: Add 'data' to the path
 structured_data_path = os.path.join(current_dir, 'data', structured_data_file)
 
 tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
