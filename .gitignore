@@ -3,6 +3,6 @@
 __pycache__/
 *.pyc
 .env
-chroma_db/
+# deleted chroma_db/ from .gitignore
 *.log
 .ipynb_checkpoints/
