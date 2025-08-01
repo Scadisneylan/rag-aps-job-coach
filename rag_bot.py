@@ -32,6 +32,11 @@ structured_data_file = "my_structured_document.csv"
 # IMPORTANT CHANGE HERE: Add 'data' to the path
 structured_data_path = os.path.join(current_dir, 'data', structured_data_file)
 
+# Ensure data directory exists
+data_dir = os.path.join(current_dir, 'data')
+if not os.path.exists(data_dir):
+    os.makedirs(data_dir, exist_ok=True)
+
 tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
 
 logger.info(f"Constructed data path: {structured_data_path}")
@@ -104,22 +109,32 @@ def initialize_rag_system():
     # 3. Create/Load Chroma Vector Store
     persist_directory = "./chroma_db"
     print(f"DEBUG: Checking for chroma_db existence at: {persist_directory}")
-    chroma_db_exists = os.path.exists(persist_directory) and os.listdir(persist_directory)
+    
+    # Ensure chroma_db directory exists
+    if not os.path.exists(persist_directory):
+        os.makedirs(persist_directory, exist_ok=True)
+    
+    try:
+        chroma_db_exists = os.path.exists(persist_directory) and len(os.listdir(persist_directory)) > 0
 
-    if chroma_db_exists:
-        logger.info(f"Loading existing ChromaDB from {persist_directory}...")
-        print("DEBUG: Loading existing ChromaDB.")
-        vectorstore = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
-        logger.info("ChromaDB loaded.")
-    else:
-        logger.info(f"Creating new ChromaDB and populating with {len(chunks)} chunks...")
-        print("DEBUG: Creating new ChromaDB.")
-        vectorstore = Chroma.from_documents(chunks, embeddings, persist_directory=persist_directory)
-        logger.info("New ChromaDB created and populated.")
+        if chroma_db_exists:
+            logger.info(f"Loading existing ChromaDB from {persist_directory}...")
+            print("DEBUG: Loading existing ChromaDB.")
+            vectorstore = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
+            logger.info("ChromaDB loaded.")
+        else:
+            logger.info(f"Creating new ChromaDB and populating with {len(chunks)} chunks...")
+            print("DEBUG: Creating new ChromaDB.")
+            vectorstore = Chroma.from_documents(chunks, embeddings, persist_directory=persist_directory)
+            logger.info("New ChromaDB created and populated.")
 
-    vectorstore.persist()
-    logger.info("Vectorstore persisted to disk.")
-    print("DEBUG: Vectorstore persisted.")
+        vectorstore.persist()
+        logger.info("Vectorstore persisted to disk.")
+        print("DEBUG: Vectorstore persisted.")
+    except Exception as e:
+        logger.error(f"Error initializing ChromaDB: {e}", exc_info=True)
+        print(f"DEBUG: ChromaDB initialization failed: {e}")
+        return False
 
 
     # 4. Set up the Retriever
@@ -159,7 +174,13 @@ print("DEBUG: Flask app created.")
 @app.route('/')
 def health_check():
     print("DEBUG: Health check endpoint hit.")
-    return "OK", 200
+    status = {
+        "status": "OK",
+        "rag_initialized": qa_chain is not None,
+        "chunks_loaded": len(chunks) if chunks else 0,
+        "openai_key_set": bool(os.getenv("OPENAI_API_KEY"))
+    }
+    return jsonify(status), 200
 
 # --- Main Query RAG API Endpoint ---
 @app.route('/query_rag', methods=['POST'])
@@ -187,4 +208,6 @@ def query_rag_api():
 # --- Main entry point for local development ---
 if __name__ == '__main__':
     print("DEBUG: Running Flask app locally.")
-    app.run(host='0.0.0.0', port=os.environ.get('PORT', 5000), debug=False)
+    port = int(os.environ.get('PORT', 5000))
+    print(f"DEBUG: Starting server on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=False)

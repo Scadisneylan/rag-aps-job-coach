@@ -43,6 +43,7 @@ googleapis-common-protos==1.70.0
 grpcio==1.74.0
 grpcio-status==1.74.0
 gunicorn==23.0.0
+psycopg2-binary==2.9.9
 h11==0.16.0
 hf-xet==1.1.5
 html5lib==1.1
