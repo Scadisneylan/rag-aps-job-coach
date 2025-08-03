@@ -219,7 +219,7 @@ def test_timeout():
     """Test endpoint to verify timeout functionality"""
     print("DEBUG: Test timeout endpoint hit.")
     data = request.get_json()
-    test_duration = data.get('duration', 5)  # Default 5 seconds
+    test_duration = data.get('duration', 30)  # Changed to 5 seconds
     
     def long_running_task():
         time.sleep(test_duration)
@@ -321,11 +321,11 @@ def query_rag_api():
         # Create a simple prompt for the LLM
         context = "\n".join([doc.page_content for doc in docs])
         prompt = f"Based on the following context, answer the question. If you cannot answer from the context, say so.\n\nContext:\n{context}\n\nQuestion: {user_query}\n\nAnswer:"
-        
+        logger.debug(f"Prompt: {prompt}")
         # Use the LLM directly with timeout
         timeout_llm_call = run_with_timeout(llm.invoke, timeout_seconds=15)
         llm_response = timeout_llm_call(prompt)
-        
+        logger.debug(f"LLM response: {llm_response}")
         elapsed_time = time.time() - start_time
         logger.info(f"Query processed successfully in {elapsed_time:.2f} seconds.")
         return jsonify({"response": llm_response.content}), 200
