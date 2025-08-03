@@ -4,7 +4,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn rag_bot:app
+    startCommand: gunicorn rag_bot:app --workers=1 --timeout=120 --max-requests=1000 --max-requests-jitter=100
     envVars:
       - key: OPENAI_API_KEY
         sync: false

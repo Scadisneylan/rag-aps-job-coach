@@ -10,6 +10,8 @@ import json
 from flask import Flask, request, jsonify
 import logging
 from dotenv import load_dotenv
+import signal
+import functools
 
 # --- DEBUG PRINT: Start of script ---
 print("DEBUG: Script started. Setting up logging.")
@@ -50,6 +52,30 @@ vectorstore = None
 retriever = None
 llm = None
 qa_chain = None
+
+# --- Timeout wrapper function ---
+def timeout_handler(signum, frame):
+    raise TimeoutError("Operation timed out")
+
+def run_with_timeout(func, timeout_seconds=30):
+    """
+    Run a function with a timeout using signal.
+    Note: This only works on Unix-like systems (Linux, macOS).
+    """
+    def wrapper(*args, **kwargs):
+        # Set the signal handler
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout_seconds)
+        
+        try:
+            result = func(*args, **kwargs)
+            return result
+        finally:
+            # Restore the original signal handler and cancel the alarm
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
+    
+    return wrapper
 
 # --- Function to initialize RAG components ---
 def initialize_rag_system():
@@ -138,14 +164,14 @@ def initialize_rag_system():
 
 
     # 4. Set up the Retriever
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 2})  # Reduced from 3 to 2
     logger.info("Retriever configured.")
     print("DEBUG: Retriever configured.")
 
     # 5. Set up the RAG Chain
     logger.info("\nInitializing ChatOpenAI LLM...")
     print("DEBUG: Initializing ChatOpenAI LLM.")
-    llm = ChatOpenAI(temperature=0.0, model_name="gpt-3.5-turbo", openai_api_key=openai_api_key)
+    llm = ChatOpenAI(temperature=0.0, model_name="gpt-3.5-turbo", openai_api_key=openai_api_key, max_tokens=500)  # Added max_tokens limit
     logger.info("ChatOpenAI LLM initialized.")
     print("DEBUG: ChatOpenAI LLM initialized.")
 
@@ -198,9 +224,14 @@ def query_rag_api():
 
     logger.info(f"Received query: {user_query}")
     try:
-        rag_response = qa_chain.run(user_query)
+        # Wrap the qa_chain.run method with timeout
+        timeout_qa_run = run_with_timeout(qa_chain.run, timeout_seconds=25)
+        rag_response = timeout_qa_run(user_query)
         logger.info("Query processed successfully.")
         return jsonify({"response": rag_response}), 200
+    except TimeoutError as e:
+        logger.error(f"Query timed out after 25 seconds: {e}")
+        return jsonify({"error": "Query timed out. Please try again with a simpler question."}), 408
     except Exception as e:
         logger.error(f"Error processing query: {e}", exc_info=True)
         return jsonify({"error": "An internal error occurred while processing the query."}), 500
@@ -210,4 +241,4 @@ if __name__ == '__main__':
     print("DEBUG: Running Flask app locally.")
     port = int(os.environ.get('PORT', 5000))
     print(f"DEBUG: Starting server on port {port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
