@@ -48,8 +48,8 @@ def initialize_rag_system():
         vectorstore = Chroma.from_documents(chunks, embeddings, persist_directory=persist_directory)
         vectorstore.persist()
 
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
-    llm = ChatOpenAI(temperature=0.0, model_name="gpt-3.5-turbo", openai_api_key=openai_api_key, max_tokens=500)
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 12})
+    llm = ChatOpenAI(temperature=0.0, model_name="gpt-3.5-turbo", openai_api_key=openai_api_key, max_tokens=1000)
     qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
 
 app = Flask(__name__)
