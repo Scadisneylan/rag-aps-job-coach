@@ -5,6 +5,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
+from langchain.prompts import PromptTemplate
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
@@ -48,9 +49,40 @@ def initialize_rag_system():
         vectorstore = Chroma.from_documents(chunks, embeddings, persist_directory=persist_directory)
         vectorstore.persist()
 
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 12})
+    # Enhanced retriever with semantic search
+    base_retriever = vectorstore.as_retriever(
+        search_type="similarity",
+        search_kwargs={
+            "k": 20,
+            "score_threshold": 0.5,
+            "fetch_k": 30
+        }
+    )
+    
+    # Custom prompt for resume analysis against APS6 standards
+    template = """You are an expert APS6 Work Level Standards analyst. Use the following context to answer the question.
+
+Context: {context}
+
+Question: {question}
+
+Instructions: 
+- If the question is about reviewing a resume against APS6 standards, analyze the resume content against the APS6 Work Level Standards provided in the context.
+- Identify specific examples from the resume that demonstrate APS6 capabilities.
+- Highlight areas where the resume shows alignment with APS6 requirements.
+- Provide constructive feedback on how well the resume demonstrates APS6 level competencies.
+
+Answer:"""
+
+    prompt = PromptTemplate(template=template, input_variables=["context", "question"])
+    
     llm = ChatOpenAI(temperature=0.0, model_name="gpt-3.5-turbo", openai_api_key=openai_api_key, max_tokens=1000)
-    qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=llm, 
+        chain_type="stuff", 
+        retriever=base_retriever,
+        chain_type_kwargs={"prompt": prompt}
+    )
 
 app = Flask(__name__)
 
