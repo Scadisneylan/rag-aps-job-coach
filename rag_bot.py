@@ -86,6 +86,10 @@ def initialize_rag_system():
         llm = ChatOpenAI(temperature=0.0, model_name="gpt-3.5-turbo", openai_api_key=openai_api_key, max_tokens=500, request_timeout=20)
         qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
         
+        # Reinitialize qa_chain to ensure fresh LLM object with proper timeout
+        print("🔄 Reinitializing QA chain with fresh LLM object...")
+        qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
+        
         print("✅ RAG system initialized successfully")
         return True
         
