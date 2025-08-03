@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores.chroma import Chroma
+from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 from flask import Flask, request, jsonify
@@ -52,8 +52,6 @@ def initialize_rag_system():
     llm = ChatOpenAI(temperature=0.0, model_name="gpt-3.5-turbo", openai_api_key=openai_api_key, max_tokens=500)
     qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
 
-initialize_rag_system()
-
 app = Flask(__name__)
 
 @app.route('/')
@@ -68,6 +66,11 @@ def query_rag_api():
     if not user_query:
         return jsonify({"error": "No 'query' provided in the request body."}), 400
 
+    # Initialize RAG system on first request to avoid startup timeout
+    global qa_chain
+    if qa_chain is None:
+        initialize_rag_system()
+    
     rag_response = qa_chain.invoke(user_query)
     return jsonify({"response": rag_response}), 200
 
