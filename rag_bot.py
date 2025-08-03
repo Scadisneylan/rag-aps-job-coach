@@ -80,14 +80,27 @@ def health_check():
 
 @app.route('/query_rag', methods=['POST'])
 def query_rag_api():
-    data = request.get_json()
-    user_query = data.get('query')
+    try:
+        data = request.get_json()
+        user_query = data.get('query')
 
-    if not user_query:
-        return jsonify({"error": "No 'query' provided in the request body."}), 400
+        print("📥 Query received:", user_query)
 
-    rag_response = qa_chain.run(user_query)
-    return jsonify({"response": rag_response}), 200
+        if not user_query:
+            print("⚠️ No query provided")
+            return jsonify({"error": "No 'query' provided in the request body."}), 400
+
+        print("🧠 About to run QA chain...")
+
+        rag_response = qa_chain.run(user_query)
+
+        print("✅ RAG chain completed:", rag_response)
+        return jsonify({"response": rag_response}), 200
+
+    except Exception as e:
+        print("❌ Error during query:", e)
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
