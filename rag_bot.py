@@ -25,7 +25,7 @@ qa_chain = None
 
 def initialize_rag_system():
     global chunks, embeddings, vectorstore, retriever, llm, qa_chain
-    
+    print("🔧 Initializing RAG system...")
     # Load CSV data
     df = pd.read_csv(structured_data_path)
     
