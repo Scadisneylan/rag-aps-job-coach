@@ -53,9 +53,9 @@ def initialize_rag_system():
     base_retriever = vectorstore.as_retriever(
         search_type="similarity",
         search_kwargs={
-            "k": 20,
-            "score_threshold": 0.5,
-            "fetch_k": 30
+            "k": 8,
+            "score_threshold": 0.6,
+            "fetch_k": 12
         }
     )
     
@@ -76,7 +76,7 @@ Answer:"""
 
     prompt = PromptTemplate(template=template, input_variables=["context", "question"])
     
-    llm = ChatOpenAI(temperature=0.0, model_name="gpt-3.5-turbo", openai_api_key=openai_api_key, max_tokens=1000)
+    llm = ChatOpenAI(temperature=0.0, model_name="gpt-3.5-turbo", openai_api_key=openai_api_key, max_tokens=800, request_timeout=30)
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm, 
         chain_type="stuff", 
