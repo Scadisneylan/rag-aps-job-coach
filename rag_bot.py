@@ -57,7 +57,7 @@ def initialize_rag_system():
 
     # Set up retriever and chain
     retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
-    llm = ChatOpenAI(temperature=0.0, model_name="gpt-3.5-turbo", openai_api_key=openai_api_key, max_tokens=500)
+    llm = ChatOpenAI(temperature=0.0, model_name="gpt-3.5-turbo", openai_api_key=openai_api_key, max_tokens=500, request_timeout=20)
     qa_chain = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
     
     return True
