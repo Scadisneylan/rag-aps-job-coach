@@ -1,0 +1,11 @@
+
+curl -X POST http://localhost:5001/query_rag \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is this document about?"}'
+
+curl -X POST https://rag-aps-job-coach.onrender.com/query_rag \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is this document about?"}'
+ 
+
+ curl http://localhost:5000/
