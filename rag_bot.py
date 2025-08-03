@@ -12,6 +12,8 @@ import logging
 from dotenv import load_dotenv
 import signal
 import functools
+import threading
+import time
 
 # --- DEBUG PRINT: Start of script ---
 print("DEBUG: Script started. Setting up logging.")
@@ -31,13 +33,8 @@ print(f"DEBUG: .env loaded. OPENAI_API_KEY from env: {os.getenv('OPENAI_API_KEY'
 # --- Configuration ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 structured_data_file = "my_structured_document.csv"
-# IMPORTANT CHANGE HERE: Add 'data' to the path
-structured_data_path = os.path.join(current_dir, 'data', structured_data_file)
-
-# Ensure data directory exists
-data_dir = os.path.join(current_dir, 'data')
-if not os.path.exists(data_dir):
-    os.makedirs(data_dir, exist_ok=True)
+# Updated path: CSV file is now in the main directory
+structured_data_path = os.path.join(current_dir, structured_data_file)
 
 tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
 
@@ -54,26 +51,34 @@ llm = None
 qa_chain = None
 
 # --- Timeout wrapper function ---
-def timeout_handler(signum, frame):
-    raise TimeoutError("Operation timed out")
-
 def run_with_timeout(func, timeout_seconds=30):
     """
-    Run a function with a timeout using signal.
-    Note: This only works on Unix-like systems (Linux, macOS).
+    Run a function with a timeout using threading.
+    This is more reliable across different platforms than signal-based timeouts.
     """
     def wrapper(*args, **kwargs):
-        # Set the signal handler
-        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(timeout_seconds)
+        result = [None]
+        exception = [None]
         
-        try:
-            result = func(*args, **kwargs)
-            return result
-        finally:
-            # Restore the original signal handler and cancel the alarm
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, old_handler)
+        def target():
+            try:
+                result[0] = func(*args, **kwargs)
+            except Exception as e:
+                exception[0] = e
+        
+        thread = threading.Thread(target=target)
+        thread.daemon = True
+        thread.start()
+        thread.join(timeout_seconds)
+        
+        if thread.is_alive():
+            # Thread is still running, timeout occurred
+            raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds")
+        
+        if exception[0]:
+            raise exception[0]
+        
+        return result[0]
     
     return wrapper
 
@@ -208,6 +213,66 @@ def health_check():
     }
     return jsonify(status), 200
 
+# --- Test endpoint for debugging ---
+@app.route('/test_timeout', methods=['POST'])
+def test_timeout():
+    """Test endpoint to verify timeout functionality"""
+    print("DEBUG: Test timeout endpoint hit.")
+    data = request.get_json()
+    test_duration = data.get('duration', 5)  # Default 5 seconds
+    
+    def long_running_task():
+        time.sleep(test_duration)
+        return f"Task completed after {test_duration} seconds"
+    
+    try:
+        logger.info(f"Testing timeout with {test_duration} second task...")
+        start_time = time.time()
+        
+        timeout_task = run_with_timeout(long_running_task, timeout_seconds=10)
+        result = timeout_task()
+        
+        elapsed_time = time.time() - start_time
+        logger.info(f"Test task completed in {elapsed_time:.2f} seconds")
+        return jsonify({"result": result, "elapsed_time": elapsed_time}), 200
+    except TimeoutError as e:
+        elapsed_time = time.time() - start_time
+        logger.error(f"Test task timed out after {elapsed_time:.2f} seconds: {e}")
+        return jsonify({"error": "Test task timed out", "elapsed_time": elapsed_time}), 408
+    except Exception as e:
+        elapsed_time = time.time() - start_time
+        logger.error(f"Test task error after {elapsed_time:.2f} seconds: {e}")
+        return jsonify({"error": str(e), "elapsed_time": elapsed_time}), 500
+
+# --- Test embedding endpoint ---
+@app.route('/test_embedding', methods=['POST'])
+def test_embedding():
+    """Test endpoint to verify embedding functionality"""
+    print("DEBUG: Test embedding endpoint hit.")
+    data = request.get_json()
+    test_text = data.get('text', 'test query')
+    
+    try:
+        logger.info(f"Testing embedding generation for: {test_text}")
+        start_time = time.time()
+        
+        if embeddings is None:
+            return jsonify({"error": "Embeddings not initialized"}), 500
+            
+        embedding = embeddings.embed_query(test_text)
+        
+        elapsed_time = time.time() - start_time
+        logger.info(f"Embedding generated in {elapsed_time:.2f} seconds, length: {len(embedding)}")
+        return jsonify({
+            "success": True, 
+            "embedding_length": len(embedding),
+            "elapsed_time": elapsed_time
+        }), 200
+    except Exception as e:
+        elapsed_time = time.time() - start_time
+        logger.error(f"Embedding generation failed after {elapsed_time:.2f} seconds: {e}")
+        return jsonify({"error": f"Embedding generation failed: {str(e)}", "elapsed_time": elapsed_time}), 500
+
 # --- Main Query RAG API Endpoint ---
 @app.route('/query_rag', methods=['POST'])
 def query_rag_api():
@@ -224,21 +289,58 @@ def query_rag_api():
 
     logger.info(f"Received query: {user_query}")
     try:
-        # Wrap the qa_chain.run method with timeout
-        timeout_qa_run = run_with_timeout(qa_chain.run, timeout_seconds=25)
-        rag_response = timeout_qa_run(user_query)
-        logger.info("Query processed successfully.")
-        return jsonify({"response": rag_response}), 200
+        # Add debug logging
+        logger.info("Starting RAG query with timeout...")
+        start_time = time.time()
+        
+        # Let's break down the qa_chain.run() into its components to see where it hangs
+        logger.info("Step 1: Retrieving relevant documents...")
+        
+        # First, let's test if the retriever itself is working
+        logger.info("Testing retriever initialization...")
+        if retriever is None:
+            logger.error("Retriever is None!")
+            return jsonify({"error": "Retriever not initialized"}), 500
+            
+        logger.info("Retriever is initialized, attempting retrieval...")
+        
+        # Test embedding generation first
+        logger.info("Testing embedding generation...")
+        try:
+            test_embedding = embeddings.embed_query("test query")
+            logger.info(f"Embedding generation successful, vector length: {len(test_embedding)}")
+        except Exception as e:
+            logger.error(f"Embedding generation failed: {e}")
+            return jsonify({"error": f"Embedding generation failed: {str(e)}"}), 500
+        
+        timeout_retrieval = run_with_timeout(retriever.get_relevant_documents, timeout_seconds=10)
+        docs = timeout_retrieval(user_query)
+        logger.info(f"Retrieved {len(docs)} documents")
+        
+        logger.info("Step 2: Running LLM generation...")
+        # Create a simple prompt for the LLM
+        context = "\n".join([doc.page_content for doc in docs])
+        prompt = f"Based on the following context, answer the question. If you cannot answer from the context, say so.\n\nContext:\n{context}\n\nQuestion: {user_query}\n\nAnswer:"
+        
+        # Use the LLM directly with timeout
+        timeout_llm_call = run_with_timeout(llm.invoke, timeout_seconds=15)
+        llm_response = timeout_llm_call(prompt)
+        
+        elapsed_time = time.time() - start_time
+        logger.info(f"Query processed successfully in {elapsed_time:.2f} seconds.")
+        return jsonify({"response": llm_response.content}), 200
     except TimeoutError as e:
-        logger.error(f"Query timed out after 25 seconds: {e}")
+        elapsed_time = time.time() - start_time
+        logger.error(f"Query timed out after {elapsed_time:.2f} seconds: {e}")
         return jsonify({"error": "Query timed out. Please try again with a simpler question."}), 408
     except Exception as e:
-        logger.error(f"Error processing query: {e}", exc_info=True)
-        return jsonify({"error": "An internal error occurred while processing the query."}), 500
+        elapsed_time = time.time() - start_time
+        logger.error(f"Error processing query after {elapsed_time:.2f} seconds: {e}", exc_info=True)
+        return jsonify({"error": f"An internal error occurred: {str(e)}"}), 500
 
 # --- Main entry point for local development ---
 if __name__ == '__main__':
     print("DEBUG: Running Flask app locally.")
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5001))
     print(f"DEBUG: Starting server on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
